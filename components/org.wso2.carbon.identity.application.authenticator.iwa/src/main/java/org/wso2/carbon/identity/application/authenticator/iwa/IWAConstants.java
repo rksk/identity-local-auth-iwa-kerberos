@@ -36,6 +36,7 @@ public class IWAConstants {
     public static final String CONNECTION_KEEP_ALIVE = "keep-alive";
     public static final String AUTHENTICATE_HEADER = "WWW-Authenticate";
     public static final String NEGOTIATE_HEADER = "Negotiate";
+    public static final String BASIC_HEADER = "Basic";
     public static final String AUTHORIZATION_HEADER = "Authorization";
     public static final String NTLM_PROLOG = "TlRMTVNT";
     public static final String SPN_NAME = "SPNName";

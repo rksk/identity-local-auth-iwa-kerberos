@@ -18,14 +18,17 @@
 
 package org.wso2.carbon.identity.application.authenticator.iwa.servlet;
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.owasp.encoder.Encode;
 import org.wso2.carbon.identity.application.authenticator.iwa.IWAAuthenticationUtil;
 import org.wso2.carbon.identity.application.authenticator.iwa.IWAConstants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.URLEncoder;
 import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
@@ -72,9 +75,7 @@ public class IWAServlet extends HttpServlet {
                 throw new ServletException("Expected HttpSession");
             }
 
-            if (!header.startsWith(IWAConstants.NEGOTIATE_HEADER)) {
-                log.error(IWAConstants.NEGOTIATE_HEADER + " header not found");
-            } else {
+            if (header.startsWith(IWAConstants.NEGOTIATE_HEADER)) {
                 // extract the token from the header
                 String token = header.substring(IWAConstants.NEGOTIATE_HEADER.length()).trim();
                 if (token.startsWith(IWAConstants.NTLM_PROLOG)) {
@@ -85,6 +86,22 @@ public class IWAServlet extends HttpServlet {
                 }
                 // pass the kerberos token to the authenticator
                 session.setAttribute(IWAConstants.KERBEROS_TOKEN, token);
+            } else if (header.startsWith(IWAConstants.BASIC_HEADER)) {
+
+                log.debug("Found basic authentication header.");
+                String credentials = header.substring(IWAConstants.BASIC_HEADER.length()).trim();
+                byte[] decoded = Base64.decodeBase64(credentials);
+                String decodedCreds = new String(decoded, "UTF-8");
+                if (decodedCreds.contains(":")) {
+                    String username = decodedCreds.split(":")[0];
+                    String password = decodedCreds.split(":")[1];
+                    PrintWriter out = response.getWriter();
+                    log.debug("Submitting basic auth form for user: " + username);
+                    out.print(createFormPage(commonAuthURL, username, password));
+                    return;
+                }
+            } else {
+                log.error(IWAConstants.NEGOTIATE_HEADER + " header not found");
             }
         } else {
             if (log.isDebugEnabled()) {
@@ -108,6 +125,7 @@ public class IWAServlet extends HttpServlet {
     private void sendUnauthorized(HttpServletResponse response, boolean close) {
         try {
             response.setHeader(IWAConstants.AUTHENTICATE_HEADER, IWAConstants.NEGOTIATE_HEADER);
+            response.addHeader(IWAConstants.AUTHENTICATE_HEADER, IWAConstants.BASIC_HEADER);
             if (close) {
                 response.addHeader(IWAConstants.HTTP_CONNECTION_HEADER, IWAConstants.CONNECTION_CLOSE);
             } else {
@@ -128,12 +146,38 @@ public class IWAServlet extends HttpServlet {
      * @return true if HTTP request is from the same host (localhost)
      */
     private boolean isLocalhost(final HttpServletRequest req) {
-        return StringUtils.equals(req.getLocalAddr(), (req.getRemoteAddr()));
+        return StringUtils.equals(req.getLocalAddr(), (req.getRemoteAddr()))
+                && !StringUtils.equals(req.getLocalAddr(), "127.0.0.1"); // just skipping to test the flow locally
     }
 
     @Override
     public void init(ServletConfig config) throws ServletException {
         // set the kerberos config path
         IWAAuthenticationUtil.setConfigFilePaths();
+    }
+
+    private String createFormPage(String redirectURI, String username, String password) {
+
+        String formHead = "<html>\n" +
+                "   <head><title>Submit This Form</title></head>\n" +
+                "   <body onload=\"javascript:document.forms[0].submit()\">\n" +
+                "    <p>Click the submit button if automatic redirection failed.</p>" +
+                "    <form method=\"post\" action=\"" + redirectURI + "\">\n";
+
+        String params = "<input type='hidden' name='username' value='"
+                + Encode.forHtmlAttribute(username) + "'/>\n";
+
+        params += "<input type='hidden' name='password' value='"
+                + Encode.forHtmlAttribute(password) + "'/>\n";
+
+        String formBottom = "<input type=\"submit\" value=\"Submit\">" +
+                "</form>\n" +
+                "</body>\n" +
+                "</html>";
+
+        StringBuilder form = new StringBuilder(formHead);
+        form.append(params);
+        form.append(formBottom);
+        return form.toString();
     }
 }

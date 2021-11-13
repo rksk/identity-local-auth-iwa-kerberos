@@ -21,8 +21,11 @@ package org.wso2.carbon.identity.application.authenticator.iwa;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.wso2.carbon.identity.application.authentication.framework.AbstractApplicationAuthenticator;
+import org.wso2.carbon.identity.application.authentication.framework.AuthenticatorFlowStatus;
 import org.wso2.carbon.identity.application.authentication.framework.context.AuthenticationContext;
 import org.wso2.carbon.identity.application.authentication.framework.exception.AuthenticationFailedException;
+import org.wso2.carbon.identity.application.authentication.framework.exception.LogoutFailedException;
+import org.wso2.carbon.identity.application.authentication.framework.util.FrameworkConstants;
 import org.wso2.carbon.identity.core.util.IdentityUtil;
 
 import java.io.IOException;
@@ -38,6 +41,22 @@ public abstract class AbstractIWAAuthenticator extends AbstractApplicationAuthen
 
     private static final long serialVersionUID = -713445365980141169L;
     private static Log log = LogFactory.getLog(AbstractIWAAuthenticator.class);
+
+    @Override
+    public AuthenticatorFlowStatus process(HttpServletRequest request,
+                                           HttpServletResponse response, AuthenticationContext context)
+            throws AuthenticationFailedException, LogoutFailedException {
+
+        if (Boolean.TRUE.equals(request.getAttribute("iwa-handled"))) {
+            request.setAttribute(FrameworkConstants.REQ_ATTR_HANDLED, true);
+        }
+        try {
+            return super.process(request, response, context);
+        } finally {
+            request.setAttribute(FrameworkConstants.REQ_ATTR_HANDLED, false);
+            request.setAttribute("iwa-handled", true);
+        }
+    }
 
     @Override
     protected void processAuthenticationResponse(HttpServletRequest request, HttpServletResponse response,
